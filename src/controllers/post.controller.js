@@ -1,26 +1,30 @@
 import { asyncHandler } from '../utils/asyncHandler.js'
+import mongoose from 'mongoose'
 import { ApiError } from '../utils/ApiError.js'
 import { User } from '../models/user.model.js'
 import { Post } from '../models/post.model.js'
 import { uploadOnCloudinary } from '../utils/cloudinary.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 
-createPost = asyncHandler(async (req, res, next) => {
+const createPost = asyncHandler(async (req, res, next) => {
     const { title, description, tags } = req.body;
-    const images = req.files.images && req.files.images?.length
-        ? req.files.images.map((image) => {
+    let images = [];
+
+    if (req.files && req.files.length) {
+        images = await Promise.all(req.files.map(async (image) => {
             const imageLocalPath = image.path;
-            const imageCloudinary = uploadOnCloudinary(imageLocalPath);
+            const imageCloudinary = await uploadOnCloudinary(imageLocalPath);
             return { url: imageCloudinary.url };
-        })
-        : [];
-    if (!imageLocalPath) {
+        }));
+    }
+
+    if (images.length === 0) {
         throw new ApiError(400, 'Please provide an image');
     }
 
     const owner = req.user._id;
 
-    const post = await Post.create({ title, description, tags: tags || [], images: images || [], owner });
+    const post = await Post.create({ title, description, tags: tags || [], images, owner });
     if (!post) {
         throw new ApiError(500, "Error while creating a post");
     }
@@ -34,25 +38,29 @@ const updatePost = asyncHandler(async (req, res, next) => {
         _id: new mongoose.Types.ObjectId(postId),
         author: req.user._id
     })
+    console.log(post);
     if (!post) {
         throw new ApiError(404, 'Post not found');
     }
-    let images =
-        req.files?.images && req.files.images?.length
-            ? req.files.images.map((image) => {
-                const imageLocalPath = image.path;
-                const imageCloudinary = uploadOnCloudinary(imageLocalPath);
-                return { url: imageCloudinary.url };
-            })
-            : [];
-    const existedImages = post.images.length; // total images already present in the post
-    const newImages = images.length; // Newly uploaded images
-    const totalImages = existedImages + newImages;
-    if (totalImages > 5) {
+    let images = post.images;
+    if (req.files && req.files.length) {
+        const existedImages = post.images.length; // total images already present in the post
+        const newImages = images.length; // Newly uploaded images
+        const totalImages = existedImages + newImages;
+        if (totalImages > 5) {
 
-        images?.map((img) => removeLocalFile(img.localPath));
+            newImages?.forEach((img) => removeLocalFile(img.localPath));
+            throw new ApiError(400, 'Cannot upload more than 5 images');
+        }
+        images = await Promise.all(req.files.map(async (image) => {
+            const imageLocalPath = image.path;
+            const imageCloudinary = await uploadOnCloudinary(imageLocalPath);
+            return { url: imageCloudinary.url, localPath: imageLocalPath };
+        }));
+        images = [...images, ...newImages];
     }
-    images = [...post.images, ...images];
+
+    
     const updatedPost = await SocialPost.findByIdAndUpdate(
         postId,
         {
@@ -68,8 +76,20 @@ const updatePost = asyncHandler(async (req, res, next) => {
         }
     );
     return res
-    .status(200)
-    .json(new ApiResponse(200, updatedPost, "Post updated successfully"));
+        .status(200)
+        .json(new ApiResponse(200, updatedPost, "Post updated successfully"));
+})
+const deletePost = asyncHandler(async (req, res, next) => {
+
+})
+const getAllPosts = asyncHandler(async (req, res, next) => {
+
+})
+const getPostById = asyncHandler(async (req, res, next) => {
+
+})
+const getPostByUsername = asyncHandler(async (req, res, next) => {
+
 })
 export {
     createPost,

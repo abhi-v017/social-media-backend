@@ -2,11 +2,10 @@ import mongoose, {Schema } from "mongoose";
 
 const postSchema = new Schema(
     {
-        image:{
+        images:{
             type: [
                 {
                     url: String,
-                    localPath: String,
                 }
             ],
             default: [],
