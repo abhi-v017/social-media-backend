@@ -8,6 +8,7 @@ import { ApiResponse } from '../utils/ApiResponse.js'
 import cloudinary from 'cloudinary'
 
 
+
 const createPost = asyncHandler(async (req, res, next) => {
     const { title, description, tags } = req.body;
     let images = [];
@@ -33,54 +34,60 @@ const createPost = asyncHandler(async (req, res, next) => {
     return res.status(201).json(new ApiResponse(201, 'Post created successfully', post));
 
 })
-const updatePost = asyncHandler(async (req, res, next) => {
+const updatePostDetails = asyncHandler(async (req, res) => {
+    const { id: postId } = req.params;
     const { title, description, tags } = req.body;
-    const { postId } = req.params.id;
-    console.log(postId);
-    const post = await Post.findOne({
-        _id: new mongoose.Types.ObjectId(postId)
-    })
-    console.log(post);
+
+    // Check if at least one field is provided
+    if (!title && !description && !tags) {
+        throw new ApiError(400, "At least one of title, description, or tags is required");
+    }
+
+    // Find the post by ID
+    const post = await Post.findById(postId);
     if (!post) {
-        throw new ApiError(404, 'Post not found');
-    }
-    let images = post.images;
-    if (req.files && req.files.length) {
-        const existedImages = post.images.length; // total images already present in the post
-        const newImages = images.length; // Newly uploaded images
-        const totalImages = existedImages + newImages;
-        if (totalImages > 5) {
-
-            newImages?.forEach((img) => removeLocalFile(img.localPath));
-            throw new ApiError(400, 'Cannot upload more than 5 images');
-        }
-        images = await Promise.all(req.files.map(async (image) => {
-            const imageLocalPath = image.path;
-            const imageCloudinary = await uploadOnCloudinary(imageLocalPath);
-            return { url: imageCloudinary.url, localPath: imageLocalPath };
-        }));
-        images = [...images, ...newImages];
+        throw new ApiError(404, "Post not found");
     }
 
+    const updateData = {};
+    if (title) updateData.title = title;
+    if (description) updateData.description = description;
+    if (tags) updateData.tags = tags;
 
-    const updatedPost = await SocialPost.findByIdAndUpdate(
+
+    // Update the post details
+    const updatedDetails = await Post.findByIdAndUpdate(
         postId,
-        {
-            $set: {
-                title,
-                description,
-                tags,
-                images,
-            },
-        },
-        {
-            new: true,
-        }
+        { $set: { ...updateData} },
+        { new: true }
     );
+
     return res
         .status(200)
-        .json(new ApiResponse(200, updatedPost, "Post updated successfully"));
-})
+        .json(new ApiResponse(200, updatedDetails, "Details updated successfully"));
+});
+const updatePostImages = asyncHandler(async (req, res) => {
+    const { id: postId } = req.params;
+    const images = req.body.images || [];
+    if (images.length === 0) {
+        throw new ApiError(400, "Please provide images to update");
+    }
+    // Find the post by ID
+    const post = await Post.findById(postId);
+    if (!post) {
+        throw new ApiError(404, "Post not found");
+    }
+    // Update the post images
+    const updatedImages = await Post.findByIdAndUpdate
+        (postId,
+            { $set: { images } },
+            { new: true }
+        );
+    return res
+        .status(200)
+        .json(new ApiResponse(200, updatedImages, "Images updated successfully"));  
+});
+
 const deletePost = asyncHandler(async (req, res, next) => {
     const { id: postId } = req.params;
 
@@ -190,9 +197,10 @@ const getPostByUsername = asyncHandler(async (req, res, next) => {
 })
 export {
     createPost,
-    updatePost,
+    updatePostDetails,
     deletePost,
     getAllPosts,
     getPostByUsername,
+    updatePostImages,
     getMyPosts
 };
