@@ -136,17 +136,63 @@ const getAllPosts = asyncHandler(async (req, res, next) => {
         totalPost
     }, "Posts fetched successfully"));
 })
-const getPostById = asyncHandler(async (req, res, next) => {
+const getMyPosts = asyncHandler(async (req, res, next) => {
+    const { page = 1, limit = 10 } = req.query;
+    const pageNumber = parseInt(page, 10);
+    const limitNumber = parseInt(limit, 10);
 
-})
+    const posts = await Post.find({ owner: req.user._id })
+        .skip((pageNumber - 1) * limitNumber)
+        .limit(limitNumber);
+
+    const totalPosts = await Post.countDocuments({ owner: req.user._id });
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {
+            posts,
+            totalPages: Math.ceil(totalPosts / limitNumber),
+            currentPage: pageNumber,
+            totalPosts,
+        }, "my posts fetched successfully"));
+});
 const getPostByUsername = asyncHandler(async (req, res, next) => {
+    const { page = 1, limit = 10 } = req.query
+    const { username } = req.params;
+    const user = await User.findOne({
+        username: username.toLowerCase(),
+    });
 
+    if (!user) {
+        throw new ApiError(
+            404,
+            "User with username '" + username + "' does not exist"
+        );
+    }
+    const pageNumber = parseInt(page, 10);
+    const limitNumber = parseInt(limit, 10);
+
+    const posts = await Post.find({ owner: user._id })
+        .skip((pageNumber - 1) * limitNumber)
+        .limit(limitNumber);
+
+    const totalPosts = await Post.countDocuments({ owner: user._id });
+
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, {
+            posts,
+            totalPages: Math.ceil(totalPosts / limitNumber),
+            currentPage: pageNumber,
+            totalPosts,
+        }, "User's posts fetched successfully"));
 })
 export {
     createPost,
     updatePost,
     deletePost,
     getAllPosts,
-    getPostById,
-    getPostByUsername
+    getPostByUsername,
+    getMyPosts
 };
