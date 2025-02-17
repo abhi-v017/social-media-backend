@@ -6,8 +6,85 @@ import { Post } from '../models/post.model.js'
 import { uploadOnCloudinary } from '../utils/cloudinary.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import cloudinary from 'cloudinary'
+import { getMongoosePaginationOptions } from '../utils/getMongoosePaginationOptions.js'
 
+const postCommonAggregation = (req) => {
+    return [
 
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "postId",
+                as: "likes",
+            },
+        },
+        {
+            $lookup: {
+                from: "likes",
+                localField: "_id",
+                foreignField: "postId",
+                as: "isLiked",
+                pipeline: [
+                    {
+                        $match: {
+                            likedBy: new mongoose.Types.ObjectId(req.user?._id),
+                        },
+                    },
+                ],
+            },
+        },
+        {
+            $lookup: {
+                from: "profiles",
+                localField: "owner",
+                foreignField: "owner",
+                as: "owner",
+                pipeline: [
+                    {
+                        $lookup: {
+                            from: "users",
+                            localField: "owner",
+                            foreignField: "_id",
+                            as: "account",
+                            pipeline: [
+                                {
+                                    $project: {
+                                        avatar: 1,
+                                        email: 1,
+                                        username: 1,
+                                    },
+                                },
+                            ],
+                        },
+                    },
+                    { $addFields: { account: { $first: "$account" } } },
+                ],
+            },
+        },
+        {
+            $addFields: {
+                owner: { $first: "$owner" },
+                likes: { $size: "$likes" },
+                isLiked: {
+                    $cond: {
+                        if: {
+                            $gte: [
+                                {
+                                    // if the isLiked key has document in it
+                                    $size: "$isLiked",
+                                },
+                                1,
+                            ],
+                        },
+                        then: true,
+                        else: false,
+                    },
+                }
+            },
+        },
+    ];
+};
 
 const createPost = asyncHandler(async (req, res, next) => {
     const { title, description, tags } = req.body;
@@ -31,7 +108,17 @@ const createPost = asyncHandler(async (req, res, next) => {
     if (!post) {
         throw new ApiError(500, "Error while creating a post");
     }
-    return res.status(201).json(new ApiResponse(201, 'Post created successfully', post));
+
+    const createdPost = await Post.aggregate([
+        {
+            $match: {
+                _id: post._id,
+            },
+        },
+        ...postCommonAggregation(req),
+    ]);
+
+    return res.status(201).json(new ApiResponse(201, 'Post created successfully', createdPost[0]));
 
 })
 const updatePostDetails = asyncHandler(async (req, res) => {
@@ -58,13 +145,20 @@ const updatePostDetails = asyncHandler(async (req, res) => {
     // Update the post details
     const updatedDetails = await Post.findByIdAndUpdate(
         postId,
-        { $set: { ...updateData} },
+        { $set: { ...updateData } },
         { new: true }
     );
-
+    const aggregatedPost = await Post.aggregate([
+        {
+            $match: {
+                _id: updatedDetails._id,
+            },
+        },
+        ...postCommonAggregation(req),
+    ]);
     return res
         .status(200)
-        .json(new ApiResponse(200, updatedDetails, "Details updated successfully"));
+        .json(new ApiResponse(200, aggregatedPost[0], "Details updated successfully"));
 });
 const updatePostImages = asyncHandler(async (req, res) => {
     const { id: postId } = req.params;
@@ -98,9 +192,18 @@ const updatePostImages = asyncHandler(async (req, res) => {
             { $set: { images } },
             { new: true }
         );
+
+    const aggregatedPost = await Post.aggregate([
+        {
+            $match: {
+                _id: updatedImages._id,
+            },
+        },
+        ...postCommonAggregation(req),
+    ]);
     return res
         .status(200)
-        .json(new ApiResponse(200, updatedImages, "Images updated successfully"));  
+        .json(new ApiResponse(200, aggregatedPost[0], "Images updated successfully"));
 });
 const deletePost = asyncHandler(async (req, res, next) => {
     const { id: postId } = req.params;
@@ -120,62 +223,59 @@ const deletePost = asyncHandler(async (req, res, next) => {
 
     await Promise.all(postImages.map(async (image) => {
         // remove images associated with the post that is being deleted
-        await cloudinary.v2.uploader.destroy(image._id);
+        await cloudinary.v2.uploader.destroy(image._id, {resource_type: 'image'});
     }));
 
     return res
         .status(200)
         .json(new ApiResponse(200, {}, "Post deleted successfully"));
 })
-const getAllPosts = asyncHandler(async (req, res, next) => {
-    const { page = 1, limit = 10, query, sortBy, sortType, userId } = req.query
-    const pageNumber = parseInt(page, 10)
-    const limitNumber = parseInt(limit, 10)
-    // Build the query object
-    const queryObject = {};
-    if (userId) {
-        queryObject.userId = userId; // Filter by userId if provided
-    }
-    if (query) {
-        queryObject.title = { $regex: query, $options: 'i' }; // Search by title if query is provided
-    }
-
-    // Fetch videos with pagination and sorting
-    const posts = await Post.find(queryObject)
-        .sort({ [sortBy]: sortType === 'asc' ? 1 : -1 }) // Sort by the specified field
-        .skip((pageNumber - 1) * limitNumber) // Skip the records for pagination
-        .limit(limitNumber); // Limit the number of records returned
-
-    // Get the total count of videos for pagination
-    const totalPost = await Post.countDocuments(queryObject);
-
-    // Return the response
-    return res.status(200).json(new ApiResponse(200, {
-        posts,
-        totalPages: Math.ceil(totalPost / limitNumber),
-        currentPage: pageNumber,
-        totalPost
-    }, "Posts fetched successfully"));
-})
-const getMyPosts = asyncHandler(async (req, res, next) => {
+const getAllPosts = asyncHandler(async (req, res) => {
     const { page = 1, limit = 10 } = req.query;
-    const pageNumber = parseInt(page, 10);
-    const limitNumber = parseInt(limit, 10);
+    const postAggregation = Post.aggregate([...postCommonAggregation(req)]);
 
-    const posts = await Post.find({ owner: req.user._id })
-        .skip((pageNumber - 1) * limitNumber)
-        .limit(limitNumber);
-
-    const totalPosts = await Post.countDocuments({ owner: req.user._id });
+    const posts = await Post.aggregatePaginate(
+        postAggregation,
+        getMongoosePaginationOptions({
+            page,
+            limit,
+            customLabels: {
+                totalDocs: "totalPosts",
+                docs: "posts",
+            },
+        })
+    );
 
     return res
         .status(200)
-        .json(new ApiResponse(200, {
-            posts,
-            totalPages: Math.ceil(totalPosts / limitNumber),
-            currentPage: pageNumber,
-            totalPosts,
-        }, "my posts fetched successfully"));
+        .json(new ApiResponse(200, posts, "Posts fetched successfully"));
+});
+const getMyPosts = asyncHandler(async (req, res, next) => {
+    const { page = 1, limit = 10 } = req.query;
+    const postAggregation = Post.aggregate([
+        {
+            $match: {
+                owner: new mongoose.Types.ObjectId(req.user?._id),
+            },
+        },
+        ...postCommonAggregation(req),
+    ]);
+
+    const posts = await Post.aggregatePaginate(
+        postAggregation,
+        getMongoosePaginationOptions({
+            page,
+            limit,
+            customLabels: {
+                totalDocs: "totalPosts",
+                docs: "posts",
+            },
+        })
+    );
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, posts, "My posts fetched successfully"));
 });
 const getPostByUsername = asyncHandler(async (req, res, next) => {
     const { page = 1, limit = 10 } = req.query
@@ -190,24 +290,32 @@ const getPostByUsername = asyncHandler(async (req, res, next) => {
             "User with username '" + username + "' does not exist"
         );
     }
-    const pageNumber = parseInt(page, 10);
-    const limitNumber = parseInt(limit, 10);
+    const userId = user._id;
 
-    const posts = await Post.find({ owner: user._id })
-        .skip((pageNumber - 1) * limitNumber)
-        .limit(limitNumber);
+    const postAggregation = Post.aggregate([
+        {
+            $match: {
+                author: new mongoose.Types.ObjectId(userId),
+            },
+        },
+        ...postCommonAggregation(req),
+    ]);
 
-    const totalPosts = await Post.countDocuments({ owner: user._id });
-
+    const posts = await Post.aggregatePaginate(
+        postAggregation,
+        getMongoosePaginationOptions({
+            page,
+            limit,
+            customLabels: {
+                totalDocs: "totalPosts",
+                docs: "posts",
+            },
+        })
+    );
 
     return res
         .status(200)
-        .json(new ApiResponse(200, {
-            posts,
-            totalPages: Math.ceil(totalPosts / limitNumber),
-            currentPage: pageNumber,
-            totalPosts,
-        }, "User's posts fetched successfully"));
+        .json(new ApiResponse(200, posts, "User's posts fetched successfully"));
 })
 export {
     createPost,
