@@ -68,16 +68,31 @@ const updatePostDetails = asyncHandler(async (req, res) => {
 });
 const updatePostImages = asyncHandler(async (req, res) => {
     const { id: postId } = req.params;
-    const images = req.body.images || [];
-    if (images.length === 0) {
+    if (!req.files || req.files.length === 0) {
         throw new ApiError(400, "Please provide images to update");
     }
+
     // Find the post by ID
     const post = await Post.findById(postId);
     if (!post) {
         throw new ApiError(404, "Post not found");
     }
-    // Update the post images
+    await Promise.all(post.images.map(async (image) => {
+        await cloudinary.v2.uploader.destroy(image._id);
+    }));
+    let images = [];
+    // Upload new images to Cloudinary
+    if (req.files && req.files.length) {
+        images = await Promise.all(req.files.map(async (image) => {
+            const imageLocalPath = image.path;
+            const imageCloudinary = await uploadOnCloudinary(imageLocalPath);
+
+            return { url: imageCloudinary.url };
+        }));
+    }
+    if (images.length === 0) {
+        throw new ApiError(400, 'Please provide an image');
+    }
     const updatedImages = await Post.findByIdAndUpdate
         (postId,
             { $set: { images } },
@@ -87,7 +102,6 @@ const updatePostImages = asyncHandler(async (req, res) => {
         .status(200)
         .json(new ApiResponse(200, updatedImages, "Images updated successfully"));  
 });
-
 const deletePost = asyncHandler(async (req, res, next) => {
     const { id: postId } = req.params;
 
