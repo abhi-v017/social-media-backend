@@ -26,6 +26,20 @@ const userSchema = new Schema(
             trim: true,
             index: true
         },
+        
+        bio: {
+            type: String,
+            required: true,
+            trim: true
+        },
+        dob: {
+            type: Date,
+            required: true
+        },
+        location: {
+            type: String,
+            default: "Earth",
+        },
         avtar:{
             type: String,
             required: true,
@@ -33,15 +47,17 @@ const userSchema = new Schema(
         coverImage:{
             type: String
         },
-        watchHistory:[
-            {
-                type: Schema.Types.ObjectId,
-                ref:"Video"
-            }
-        ],
         password:{
             type: String,
             required: [true, "password is required"],
+        },
+        followersCount:{
+            type: Number,
+            default: 0
+        },
+        followingCount:{
+            type: Number,
+            default: 0
         },
         refreshToken:{
             type: String

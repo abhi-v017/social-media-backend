@@ -1,9 +1,11 @@
 import { asyncHandler } from '../utils/asyncHandler.js'
 import { ApiError } from '../utils/ApiError.js'
 import { User } from '../models/user.model.js'
+import { Follow } from '../models/follow.model.js'
 import { uploadOnCloudinary } from '../utils/cloudinary.js'
 import { ApiResponse } from '../utils/ApiResponse.js'
 import jwt from 'jsonwebtoken'
+import mongoose from 'mongoose'
 
 
 const generateAccessAndRefreshToken = async (userId) => {
@@ -33,7 +35,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
 
     //get user details from front end ---------done
-    const { fullName, username, email, password } = req.body
+    const { fullName, username, email, password, bio, dob, location } = req.body
     console.log('email', email)
 
     // if(fullName === ''){
@@ -42,7 +44,7 @@ const registerUser = asyncHandler(async (req, res) => {
 
     //validation not empty ---------done
     if (
-        [fullName, email, username, password].some((field) => field?.trim() === "")
+        [fullName, email, username, password, bio, dob, location].some((field) => field?.trim() === "")
     ) {
         throw new ApiError(400, "all fields are required")
     }
@@ -81,6 +83,9 @@ const registerUser = asyncHandler(async (req, res) => {
         coverImage: coverImage?.url || "",
         email,
         password,
+        bio,
+        dob,
+        location,
         username: username.toLowerCase()
     })
 
@@ -241,8 +246,8 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 })
 
 const updateUserDetails = asyncHandler(async (req, res) => {
-    const { username, fullName } = req.body
-    if (!username || !fullName) {
+    const { username, fullName, bio, dob, location } = req.body
+    if (!username || !fullName || !bio || !dob || !location) {
         throw new ApiError(400, "values are required")
     }
     const user = await User.findByIdAndUpdate(
@@ -250,7 +255,10 @@ const updateUserDetails = asyncHandler(async (req, res) => {
         {
             $set: {
                 fullName,
-                username
+                username,
+                bio,
+                dob,
+                location
             }
         },
         {
@@ -318,72 +326,83 @@ const updateCoverImage = asyncHandler(async (req, res) => {
         .status(200)
         .json(200, user, "cover Image changed successfully")
 })
-
-const getUserChannelProfile = asyncHandler(async (req, res) => {
-    const { username } = req.params
-    if (!username?.trim()) {
-        throw new ApiError(400, 'username not found')
+const getUserProfile = async (userId, req, isCurrentUser=false) => {
+    const user = await User.findById(userId);
+    if (!user) {
+        throw new ApiError(404, "User not found");
     }
-    const channel = await User.aggregate([
+    let profile = await User.aggregate([
         {
             $match: {
-                username: username?.lowercase()
-            }
+                _id: new mongoose.Types.ObjectId(userId),
+            },
         },
         {
             $lookup: {
-                from: 'subscriptions',
-                localField: '_id',
-                foreignField: 'channel',
-                as: 'subscribers'
-            }
+                from: "follows",
+                localField: "_id",
+                foreignField: "followerId",
+                as: "following", // users that are followed by current user
+            },
         },
         {
             $lookup: {
-                from: 'subscriptions',
-                localField: '_id',
-                foreignField: 'subscriber',
-                as: 'subscribed'
-            }
+                from: "follows",
+                localField: "_id",
+                foreignField: "followeeId",
+                as: "followedBy", // users that are following the current user
+            },
         },
         {
             $addFields: {
-                subscribersCount: {
-                    $size: '$subscribers'
-                },
-                subscribedCount: {
-                    $size: '$subscribed'
-                },
-                isSubscribed: {
-                    $cond: {
-                        if: { $in: [req.user?._id, "$subscribers.subscriber"] },
-                        then: true,
-                        else: false
-                    }
-                }
-            }
+                followersCount: { $size: "$followedBy" },
+                followingCount: { $size: "$following" },
+            },
         },
         {
             $project: {
-                fullName: 1,
-                username: 1,
-                subscribedCount: 1,
-                subscribersCount: 1,
-                isSubscribed: 1,
-                avtar: 1,
-                coverImage: 1
-            }
-        }
-    ])
-    if (!channel?.length) {
-        throw new ApiResponse(404, 'channel not found')
+                followedBy: 0,
+                following: 0,
+            },
+        },
+    ]);
+    let isFollowing = false;
+    if (!isCurrentUser && req.user?._id && req.user?._id?.toString() !== userId.toString()) {
+        const followInstance = await Follow.findOne({
+            followerId: req.user?._id,
+            followeeId: userId,
+        });
+        isFollowing = followInstance ? true : false;
     }
+    const userProfile = profile[0];
+    if (!userProfile) {
+        throw new ApiError(404, "User profile does not exist");
+    }
+    return { ...userProfile, isFollowing };
+};
+const getMyProfile = asyncHandler(async (req, res) => {
+    let profile = await getUserProfile(req.user._id, req, true);
+    return res
+        .status(200)
+        .json(new ApiResponse(200, profile, "User profile fetched successfully"));
+});
+const getProfileByUserName = asyncHandler(async (req, res) => {
+    const { username } = req.params;
+
+    const user = await User.findOne({ username });
+
+    if (!user) {
+        throw new ApiError(404, "User does not exist");
+    }
+
+    const userProfile = await getUserProfile(user._id, req);
+
     return res
         .status(200)
         .json(
-            new ApiResponse(200, channel[0], 'channel fetch successfully')
-        )
-})
+            new ApiResponse(200, userProfile, "User profile fetched successfully")
+        );
+});
 
 export {
     registerUser,
@@ -395,5 +414,6 @@ export {
     updateUserDetails,
     updateAvtar,
     updateCoverImage,
-    getUserChannelProfile
+    getMyProfile,
+    getProfileByUserName
 }
