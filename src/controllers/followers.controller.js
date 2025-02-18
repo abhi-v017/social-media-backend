@@ -82,8 +82,7 @@ const getFollowersListByUserName = asyncHandler(async (req, res) => {
                 pipeline: [
                     {
                         $project: {
-                            firstName: 1,
-                            lastName: 1,
+                            username:1,
                             bio: 1,
                             location: 1,
                             coverImage: 1,
@@ -240,8 +239,7 @@ const getFollowingListByUserName = asyncHandler(async (req, res) => {
                 pipeline: [
                     {
                         $project: {
-                            firstName: 1,
-                            lastName: 1,
+                            username: 1,
                             bio: 1,
                             location: 1,
                             coverImage: 1,
@@ -278,7 +276,7 @@ const getFollowingListByUserName = asyncHandler(async (req, res) => {
         },
         {
             $lookup: {
-                 from: "users",
+                from: "users",
                 localField: "followeeId",
                 foreignField: "_id",
                 as: "following",
@@ -291,7 +289,7 @@ const getFollowingListByUserName = asyncHandler(async (req, res) => {
                             as: "profile",
                         },
                     },
-                     {
+                    {
                         $lookup: {
                             from: "follows",
                             localField: "_id",
