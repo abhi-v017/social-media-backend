@@ -15,7 +15,7 @@ const postCommonAggregation = (req) => {
             $lookup: {
                 from: "likes",
                 localField: "_id",
-                foreignField: "postId",
+                foreignField: "post",
                 as: "likes",
             },
         },
@@ -23,7 +23,7 @@ const postCommonAggregation = (req) => {
             $lookup: {
                 from: "likes",
                 localField: "_id",
-                foreignField: "postId",
+                foreignField: "post",
                 as: "isLiked",
                 pipeline: [
                     {
@@ -36,7 +36,7 @@ const postCommonAggregation = (req) => {
         },
         {
             $lookup: {
-                from: "profiles",
+                from: "users",
                 localField: "owner",
                 foreignField: "owner",
                 as: "owner",

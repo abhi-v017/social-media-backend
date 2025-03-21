@@ -24,6 +24,11 @@ const postSchema = new Schema(
             type: [String],
             default: []
         },
+        likesCount:{
+            type: Schema.Types.ObjectId,
+            ref: "Likes",
+            default: [] 
+        },
         owner:{
             type: Schema.Types.ObjectId,
             ref: "User"
