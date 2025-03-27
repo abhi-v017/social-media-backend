@@ -98,7 +98,7 @@ const getFollowersListByUserName = asyncHandler(async (req, res) => {
             $project: {
                 username: 1,
                 email: 1,
-                avatar: 1,
+                avtar: 1,
                 profile: 1,
             },
         },
@@ -172,7 +172,7 @@ const getFollowersListByUserName = asyncHandler(async (req, res) => {
                         $project: {
                             username: 1,
                             email: 1,
-                            avatar: 1,
+                            avtar: 1,
                             profile: 1,
                             isFollowing: 1,
                         },
@@ -243,6 +243,7 @@ const getFollowingListByUserName = asyncHandler(async (req, res) => {
                             bio: 1,
                             location: 1,
                             coverImage: 1,
+                            avtar: 1, // Include avtar in the profile projection
                         },
                     },
                 ],
@@ -255,7 +256,7 @@ const getFollowingListByUserName = asyncHandler(async (req, res) => {
             $project: {
                 username: 1,
                 email: 1,
-                avatar: 1,
+                avtar: 1, // Include avtar in the main user projection
                 profile: 1,
             },
         },
@@ -327,7 +328,7 @@ const getFollowingListByUserName = asyncHandler(async (req, res) => {
                         $project: {
                             username: 1,
                             email: 1,
-                            avatar: 1,
+                            avtar: 1,
                             profile: 1,
                             isFollowing: 1,
                         },

@@ -247,9 +247,6 @@ const getCurrentUser = asyncHandler(async (req, res) => {
 
 const updateUserDetails = asyncHandler(async (req, res) => {
     const { username, fullName, bio, dob, location } = req.body
-    if (!username || !fullName || !bio || !dob || !location) {
-        throw new ApiError(400, "values are required")
-    }
     const user = await User.findByIdAndUpdate(
         req.user?._id,
         {
