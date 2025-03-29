@@ -25,9 +25,9 @@ const postSchema = new Schema(
             default: []
         },
         likesCount:{
-            type: Schema.Types.ObjectId,
+            type: [Schema.Types.ObjectId],
             ref: "Likes",
-            default: [] 
+            default: []
         },
         owner:{
             type: Schema.Types.ObjectId,
