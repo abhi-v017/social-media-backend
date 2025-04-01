@@ -277,6 +277,29 @@ const getMyPosts = asyncHandler(async (req, res, next) => {
         .status(200)
         .json(new ApiResponse(200, posts, "My posts fetched successfully"));
 });
+const getPostById = asyncHandler(async(req, res, next)=>{
+    const { id: postId } = req.params;
+
+    // Find the post by ID and aggregate with common pipeline
+    const post = await Post.aggregate([
+        {
+            $match: {
+                _id: new mongoose.Types.ObjectId(postId)
+            }
+        },
+        ...postCommonAggregation(req)
+    ]);
+
+    if (!post || post.length === 0) {
+        throw new ApiError(404, "Post not found");
+    }
+
+    return res
+        .status(200)
+        .json(new ApiResponse(200, post[0], "Post fetched successfully"));
+})
+
+
 const getPostByUsername = asyncHandler(async (req, res, next) => {
     const { page = 1, limit = 10 } = req.query
     const { username } = req.params;
@@ -324,5 +347,6 @@ export {
     getAllPosts,
     getPostByUsername,
     updatePostImages,
-    getMyPosts
+    getMyPosts,
+    getPostById
 };

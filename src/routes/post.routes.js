@@ -1,5 +1,5 @@
 import { Router } from "express";
-import {createPost, updatePostDetails, deletePost, getAllPosts, getPostByUsername, getMyPosts, updatePostImages} from '../controllers/post.controller.js'
+import {createPost, updatePostDetails, deletePost, getAllPosts, getPostByUsername, getMyPosts, updatePostImages, getPostById} from '../controllers/post.controller.js'
 import { upload } from '../middlewares/multer.middleware.js'
 import {verifyJwt} from "../middlewares/auth.middleware.js"
 
@@ -12,6 +12,7 @@ router.route('/update-post-detail/:id').patch(verifyJwt, updatePostDetails)
 router.route('/update-post-image/:id').patch(verifyJwt, upload.array('images'), updatePostImages)
 router.route('/get/u/:username').get(verifyJwt, getPostByUsername)
 router.route("/get/my").get(verifyJwt, getMyPosts);
+router.route("/get/:id").get(verifyJwt, getPostById)
 
 
 export default router
